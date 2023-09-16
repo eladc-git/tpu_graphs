@@ -17,12 +17,13 @@
 from typing import Any, Callable, Sequence
 import tensorflow as tf
 import tensorflow_ranking as tfr
+from scipy import stats
 
 
 def top_error_performance(
         test_ds: tf.data.Dataset,
         model_fn: Callable[[Any, int], tf.Tensor],
-        top_k: Sequence[int] = (1, 5, 10)):
+        top_k: Sequence[int] = (1, 10, 100)):
     """Computes test errors as: (ModelChosen - Best) / Best.
 
   where ModelChosen is the (measured) runtime of configuration chosen by model
@@ -46,34 +47,29 @@ def top_error_performance(
     dict with each of `top_k` as a key and value is error described above.
   """
     num_examples = 0
+    layout_metric = 0
     result: dict[int, float] = {k: 0.0 for k in top_k}
-    tile_metric = 0
     for graph in test_ds:
-        num_configs = int(graph.node_sets['config'].sizes[0].numpy())
+        runtimes = graph.node_sets['g']['runtimes']
+        num_configs = runtimes.shape[1]
+        runtimes = tf.squeeze(runtimes, 0)
         preds = model_fn(graph, num_configs)
-        preds = tf.squeeze(preds, 0)  # Remove batch size (of 1)
+        preds = tf.squeeze(preds, 0) # Remove batch size (of 1)
         sorted_indices = tf.argsort(preds)
-        runtimes = graph.node_sets['config']['runtimes']
         time_best = tf.reduce_min(runtimes)
+        layout_metric += stats.kendalltau(preds.numpy(), runtimes.numpy()).statistic
         num_examples += 1
         for k in top_k:
             time_model_candidates = tf.gather(runtimes, sorted_indices[:k])
             best_of_candidates = tf.reduce_min(time_model_candidates)
             result[k] += float((best_of_candidates - time_best) / time_best)
-            if k==5:
-                tile_metric_i = 2 - float(best_of_candidates / time_best)
-                if tile_metric_i < 0.8:
-                    id = graph.node_sets['g']['tile_id'][0]
-                    print(f'{id}:{tile_metric_i}')
-                tile_metric += tile_metric_i
-
 
     for k in top_k:
         result[k] /= num_examples
 
-    tile_metric /= num_examples
+    layout_metric /= num_examples
 
-    return result, tile_metric
+    return result, layout_metric
 
 
 LOSS_DICT = {
@@ -123,19 +119,3 @@ class CombinedLoss(tf.keras.losses.Loss):
         return tf.math.add_n([weight * loss(y_true, y_pred)
                               for weight, loss in self._weighted_losses])
 
-
-class TileMetric(tf.keras.metrics.Metric):
-        def __init__(self, k=2, name='tile_metric', **kwargs):
-            super(TileMetric, self).__init__(name=name, **kwargs)
-            self.k = k
-            self.tile_metric = 0
-
-        def update_state(self, y_true, y_pred, sample_weight=None):
-            y_true_min = tf.reduce_min(y_true, axis=1)
-            topk_indices = tf.math.top_k(-y_pred, k=self.k).indices
-            gathered_values = tf.gather(y_true, topk_indices, batch_dims=-1)
-            y_pred_min = tf.reduce_min(gathered_values, axis=1)
-            self.tile_metric = 2 - tf.reduce_mean(y_pred_min/y_true_min)
-
-        def result(self):
-            return self.tile_metric

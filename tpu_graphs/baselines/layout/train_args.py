@@ -17,12 +17,11 @@
 import hashlib
 import json
 import os
-import time
 from typing import NamedTuple
 
 from absl import flags
 
-_EPOCHS = flags.DEFINE_integer('epochs', 500, 'number of train epochs.')
+_EPOCHS = flags.DEFINE_integer('epochs', 50, 'number of train epochs.')
 _EARLY_STOP = flags.DEFINE_integer(
     'early_stop', 40,
     'If held-out validation does not improve after this many epochs, then '
@@ -44,10 +43,10 @@ _KEEP_NODES = flags.DEFINE_integer(
     'keep_nodes', 5000,
     'Sets the number of nodes to keep for Graph-Segmented-Training')
 _BATCH = flags.DEFINE_integer(
-    'batch', 8,
+    'batch', 2,
     'Batch size: number of subgraphs, each with `--configs` configurations.')
 _OUTPUT_DIR = flags.DEFINE_string(
-    'out_dir', '~/out/tpugraphs_layout',
+    'out_dir', 'out',
     'Output metrics and trained models will be written here.')
 _RESULTS_CSV = flags.DEFINE_string(
     'results_csv', '',
@@ -66,66 +65,77 @@ _SOURCE = flags.DEFINE_string(
     'source', 'xla', 'The graphs collection. You may use "xla" or "nlp".')
 _SEARCH = flags.DEFINE_string(
     'search', 'random', 'The optimization search space. "random" or "default".')
-
+_VER = flags.DEFINE_string(
+    'ver', 'vX.X', 'Version')
+_SEED = flags.DEFINE_integer(
+    'seed', 0, 'Seed')
+_LOSSES = flags.DEFINE_string(
+    'losses', 'ListMLELoss:1,MSE:0.02',
+    'Comma-separated list of "lossName:lossWeight", per `metrics.py`.')
+_REPS = flags.DEFINE_integer('reps', 1, "Number of repetitions")
 
 class TrainArgs(NamedTuple):
-  """Bundles flags for model specification and training loop."""
-  # Data
-  source: str  # One of "nlp" or "xla"
-  search: str  # One of "random" or "default"
+    """Bundles flags for model specification and training loop."""
+    # Data
+    source: str  # One of "nlp" or "xla"
+    search: str  # One of "random" or "default"
 
-  # Training loop.
-  epochs: int
-  batch_size: int
-  configs: int
-  max_configs: int
-  early_stop: int
-  keep_nodes: int
+    # Training loop.
+    epochs: int
+    batch_size: int
+    configs: int
+    max_configs: int
+    early_stop: int
+    keep_nodes: int
+    losses: str
 
-  # Optimization.
-  learning_rate: float
-  clip_norm: float
+    # Optimization.
+    learning_rate: float
+    clip_norm: float
 
-  # Inference.
-  out_dir: str
-  results_csv: str
-  validate_batches: int
+    # Inference.
+    out_dir: str
+    results_csv: str
+    validate_batches: int
 
-  # To run multiple experiments.
-  run_id: str
+    # To run multiple experiments.
+    run_id: str
+    ver: str
+    seed: int
+    reps: int
 
-  def compute_hash(self) -> str:
-    """Returns psuedo-random string that uniquely identifies flag arguments."""
-    json_args = json.dumps(self._asdict(), sort_keys=True).encode()
-    return hashlib.md5(json_args).hexdigest()
+    def compute_hash(self) -> str:
+        """Returns psuedo-random string that uniquely identifies flag arguments."""
+        json_args = json.dumps(self._asdict(), sort_keys=True).encode()
+        return hashlib.md5(json_args).hexdigest()
 
 
 def _get_results_csv_or_default() -> str:
-  """Returns path for CSV file where inference results should be saved.
+    """Returns path for CSV file where inference results should be saved.
 
   Returns:
     If flag --results_csv is set, it returns it. Otherwise, returns
     f"~/{--out_dir}/results_{timestamp}_{--source}_{--search}.csv".
   """
-  results_csv = _RESULTS_CSV.value
-  if not results_csv:
-    source, search = _SOURCE.value, _SEARCH.value
-    results_csv = os.path.join(
-        os.path.expanduser(_OUTPUT_DIR.value),
-        f'results_{int(time.time() * 1000)}_{source}_{search}.csv')
+    results_csv = _RESULTS_CSV.value
+    if not results_csv:
+        source, search = _SOURCE.value, _SEARCH.value
+        results_csv = os.path.join(
+            os.path.expanduser(_OUTPUT_DIR.value), _VER.value,
+            f'results_{_VER.value}_{source}_{search}.csv')
 
-  dirname = os.path.dirname(results_csv)
-  if not os.path.exists(dirname):
-    os.makedirs(dirname)
-  return results_csv
+    dirname = os.path.dirname(results_csv)
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+    return results_csv
 
 
 def get_args() -> TrainArgs:
-  return TrainArgs(
-      source=_SOURCE.value, search=_SEARCH.value,
-      epochs=_EPOCHS.value, batch_size=_BATCH.value,
-      early_stop=_EARLY_STOP.value, keep_nodes=_KEEP_NODES.value,
-      learning_rate=_LEARNING_RATE.value, clip_norm=_CLIP_NORM.value,
-      configs=_NUM_CONFIGS.value, max_configs=_MAX_CONFIGS.value,
-      out_dir=_OUTPUT_DIR.value, validate_batches=_VALIDATE_BATCHES.value,
-      results_csv=_get_results_csv_or_default(), run_id=_RUN_ID.value)
+    return TrainArgs(
+        source=_SOURCE.value, search=_SEARCH.value, ver=_VER.value, seed=_SEED.value,
+        epochs=_EPOCHS.value, batch_size=_BATCH.value, losses=_LOSSES.value, reps=_REPS.value,
+        early_stop=_EARLY_STOP.value, keep_nodes=_KEEP_NODES.value,
+        learning_rate=_LEARNING_RATE.value, clip_norm=_CLIP_NORM.value,
+        configs=_NUM_CONFIGS.value, max_configs=_MAX_CONFIGS.value,
+        out_dir=_OUTPUT_DIR.value, validate_batches=_VALIDATE_BATCHES.value,
+        results_csv=_get_results_csv_or_default(), run_id=_RUN_ID.value)

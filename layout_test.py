@@ -47,7 +47,7 @@ warnings.filterwarnings("ignore")
 
 def main(unused_argv: Sequence[str]) -> None:
     args = train_args.get_args()
-    train_lib.train(args)
+    train_lib.evaluate(args)
 
 
 if __name__ == '__main__':

@@ -26,28 +26,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Binary for invoking the training loop.
-
-# Usage Example
-```sh
-BIN='python baselines/layout/layout_train.py'
-
-$BIN --source xla --search random --epochs 10 --max_configs 1000
-$BIN --source xla --search default --epochs 10 --max_configs 1000
-$BIN --source nlp --search random --epochs 10 --max_configs 1000
-$BIN --source nlp --search default --epochs 10 --max_configs 1000
-"""
+"""Binary for invoking the training loop."""
 
 from collections.abc import Sequence
+
 from absl import app
-from tpu_graphs.baselines.layout import train_args
-from tpu_graphs.baselines.layout import train_lib
-import warnings
-warnings.filterwarnings("ignore")
+
+from tpu_graphs.baselines.tiles import train_args
+from tpu_graphs.baselines.tiles import train_lib
+
 
 def main(unused_argv: Sequence[str]) -> None:
-    args = train_args.get_args()
-    train_lib.train(args)
+    train_lib.test(train_args.get_args())
 
 
 if __name__ == '__main__':
